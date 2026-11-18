@@ -116,7 +116,9 @@ dependencies {
   implementation(libs.androidx.navigation.compose)
   implementation(libs.androidx.room.ktx)
   implementation(libs.androidx.room.runtime)
-  implementation(libs.coil.compose)
+  // Coil was declared but never used (no AsyncImage / rememberAsyncImagePainter in
+  // source). It was also the only thing pulling okhttp into the release classpath.
+  // implementation(libs.coil.compose)
   // implementation(libs.converter.moshi)
   // implementation(libs.firebase.ai)
   // Uncomment to use Firestore:
