@@ -168,7 +168,7 @@ jobs:
           echo "APK_PATH=${RUNNER_TEMP}/${APK_ARTIFACT_NAME}" >> "$GITHUB_ENV"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: release-apk
           path: ${{ env.APK_PATH }}
@@ -176,7 +176,7 @@ jobs:
           retention-days: 90
 
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           name: BA Screen Record ${{ env.VERSION_NAME }}
