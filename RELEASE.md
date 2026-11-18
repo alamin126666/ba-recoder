@@ -199,3 +199,33 @@ export VERSION_NAME=1.0.1 VERSION_CODE=2
 | `Release signing keystore not found` | `KEYSTORE_BASE64` সঠিকভাবে decode হচ্ছে না |
 | `apksigner verify` ফেল | `STORE_PASSWORD` / `KEY_PASSWORD` মিলছে না |
 | বিল্ডে SDK পাওয়া যাচ্ছে না | workflow-এর sdkmanager ধাপের লগ দেখুন |
+
+---
+
+## ১১. ব্যানার ও README আর্টওয়ার্ক
+
+README-এর তিনটি ব্যানার **হাতে আঁকা নয়** — কোড থেকে তৈরি। ব্র্যান্ড রং সরাসরি অ্যাপের `app/src/main/res/values/colors.xml` থেকে পড়া হয়, তাই আর্টওয়ার্ক আর চলমান UI কখনো আলাদা হয়ে যেতে পারে না।
+
+```bash
+pip install pillow
+python3 tools/make_banners.py
+```
+
+| ফাইল | মাপ | কোথায় ব্যবহৃত |
+|---|---|---|
+| `docs/banners/hero.png` | ১৬০০ × ৬৪০ | README হেডার |
+| `docs/banners/features.png` | ১৬০০ × ৪৬০ | ফিচার স্ট্রিপ |
+| `docs/banners/social-preview.png` | ১২৮০ × ৬৪০ | GitHub social preview |
+
+### রং পরিবর্তন করতে চাইলে
+
+`tools/make_banners.py`-এর উপরের দিকে `INK`, `EMERALD`, `MINT` — এই টোকেনগুলো বদলান, তারপর আবার চালান। অ্যাপের রংও একসাথে বদলালে দুই জায়গায় মিল থাকবে।
+
+### Social preview সেট করা
+
+GitHub API দিয়ে এই সেটিং বদলানো যায় না। একবার হাতে করতে হবে:
+
+```text
+Settings → General → Social preview → Upload
+ docs/banners/social-preview.png
+```
