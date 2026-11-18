@@ -41,6 +41,16 @@ android {
       storePassword = System.getenv("STORE_PASSWORD")
       keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
       keyPassword = System.getenv("KEY_PASSWORD")
+
+      // v1 (JAR) signing is unnecessary for minSdk 24+ and only slows down install.
+      // v2 is required for modern Android. v3 is enabled so the APK carries a signing
+      // lineage — that is what allows a future key rotation without breaking updates,
+      // and it gives Play/Android stronger tamper detection. v4 (.idsig) is only useful
+      // for incremental install flows, so it stays off for a plain downloadable APK.
+      enableV1Signing = false
+      enableV2Signing = true
+      enableV3Signing = true
+      enableV4Signing = false
     }
     create("debugConfig") {
       storeFile = file("${rootDir}/debug.keystore")
