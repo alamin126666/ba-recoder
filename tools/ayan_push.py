@@ -52,6 +52,8 @@ SKIP_NAMES = {
     ".env", "local.properties", "keystore.properties", "my-upload-key.jks",
     "debug.keystore", ".DS_Store", "Thumbs.db", "secrets.json",
 }
+# `.env.example` / `.env.sample` হলো টেমপ্লেট — commit করা উচিত (আসল `.env` কখনো নয়)
+ENV_TEMPLATE_NAMES = {".env.example", ".env.sample", ".env.template", ".env.dist"}
 MAX_FILE_BYTES = 40 * 1024 * 1024  # GitHub blob limit এর নিরাপদ সীমা
 
 # এই ফাইলগুলো GitHub-এ executable (100755) হিসেবে যেতে হবে, নাহলে Actions-এ ./gradlew fail করবে।
@@ -108,7 +110,10 @@ def collect_files(root: str) -> list[tuple[str, str]]:
             d for d in dirnames if d not in SKIP_DIRS and d != ".git"
         )
         for name in sorted(filenames):
-            if name in SKIP_NAMES or name.startswith(".env"):
+            if name in SKIP_NAMES:
+                continue
+            # `.env` ও `.env.local` ইত্যাদি বাদ, কিন্তু `.env.example` টেমপ্লেট রাখা হবে
+            if name.startswith(".env") and name not in ENV_TEMPLATE_NAMES:
                 continue
             ext = os.path.splitext(name)[1].lower()
             if ext in SKIP_EXT:
