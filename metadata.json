@@ -1,0 +1,8 @@
+{
+  "name": "BA Screen Record",
+  "description": "Capture high-quality 2K screen recordings with this professional, intuitive, and feature-rich Android recording tool.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

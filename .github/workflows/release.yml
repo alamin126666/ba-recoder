@@ -1,0 +1,182 @@
+name: Release APK
+
+# Builds a signed, optimized release APK and publishes it to GitHub Releases.
+# Triggers:
+#   * pushing a tag like v1.2.0
+#   * manual "Run workflow" from the Actions tab
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: "Version name (e.g. 1.2.0). Leave empty to use the tag or 1.0"
+        required: false
+        type: string
+      version_code:
+        description: "Version code (integer). Leave empty to use the workflow run number"
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-release:
+    name: Build signed release APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install required Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          SDKMANAGER="${ANDROID_SDK_ROOT}/cmdline-tools/latest/bin/sdkmanager"
+          if [ ! -x "$SDKMANAGER" ]; then
+            SDKMANAGER=$(find "${ANDROID_SDK_ROOT}/cmdline-tools" -name sdkmanager -type f | head -1)
+          fi
+          echo "Using sdkmanager: $SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install \
+            "platform-tools" \
+            "platforms;android-36" \
+            "platforms;android-36.1" \
+            "build-tools;36.0.0" \
+            "build-tools;36.1.0"
+
+      - name: Resolve version metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME=""
+          if [ "${{ github.event_name }}" = "push" ]; then
+            VERSION_NAME="${GITHUB_REF_NAME#v}"
+          fi
+          if [ -z "${VERSION_NAME}" ]; then
+            VERSION_NAME="${{ inputs.version_name }}"
+          fi
+          if [ -z "${VERSION_NAME}" ]; then
+            VERSION_NAME="1.0"
+          fi
+          VERSION_CODE="${{ inputs.version_code }}"
+          if [ -z "${VERSION_CODE}" ]; then
+            VERSION_CODE="${GITHUB_RUN_NUMBER}"
+          fi
+          RELEASE_TAG="v${VERSION_NAME}"
+          echo "VERSION_NAME=${VERSION_NAME}" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=${VERSION_CODE}" >> "$GITHUB_ENV"
+          echo "RELEASE_TAG=${RELEASE_TAG}" >> "$GITHUB_ENV"
+          echo "APK_ARTIFACT_NAME=BA-Screen-Record-${VERSION_NAME}.apk" >> "$GITHUB_ENV"
+          echo "Building version ${VERSION_NAME} (code ${VERSION_CODE}), tag ${RELEASE_TAG}"
+
+      - name: Decode signing keystore
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE_BASE64}" ]; then
+            echo "::error::Missing repository secret KEYSTORE_BASE64."
+            echo "::error::Base64-encode your upload keystore and add it as a secret (see RELEASE.md)."
+            exit 1
+          fi
+          KEYSTORE_FILE="${RUNNER_TEMP}/release-keystore.jks"
+          printf '%s' "${KEYSTORE_BASE64}" | base64 --decode > "${KEYSTORE_FILE}"
+          if [ ! -s "${KEYSTORE_FILE}" ]; then
+            echo "::error::Decoded keystore is empty — check the KEYSTORE_BASE64 secret."
+            exit 1
+          fi
+          echo "KEYSTORE_PATH=${KEYSTORE_FILE}" >> "$GITHUB_ENV"
+
+      - name: Validate signing secrets
+        shell: bash
+        env:
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::Missing repository secret ${name}."
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then exit 1; fi
+          echo "All signing secrets are present."
+
+      - name: Build optimized, minified, signed release APK
+        shell: bash
+        env:
+          SIGNING_REQUIRED: "true"
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          ./gradlew :app:assembleRelease \
+            --no-daemon \
+            --stacktrace \
+            -PciBuild=true
+
+      - name: Verify APK signature
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK=$(find app/build/outputs/apk/release -maxdepth 1 -name "*.apk" | head -1)
+          if [ -z "$APK" ]; then
+            echo "::error::No release APK was produced."
+            exit 1
+          fi
+          echo "APK: $APK"
+          APKSIGNER=$(find "${ANDROID_SDK_ROOT}/build-tools" -name apksigner -type f | sort -V | tail -1)
+          echo "apksigner: $APKSIGNER"
+          "$APKSIGNER" verify --verbose --print-certs "$APK"
+          echo "SHA256: $(sha256sum "$APK")"
+          echo "SIZE: $(du -h "$APK" | cut -f1)"
+          cp "$APK" "${RUNNER_TEMP}/${APK_ARTIFACT_NAME}"
+          echo "APK_PATH=${RUNNER_TEMP}/${APK_ARTIFACT_NAME}" >> "$GITHUB_ENV"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-apk
+          path: ${{ env.APK_PATH }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: BA Screen Record ${{ env.VERSION_NAME }}
+          files: ${{ env.APK_PATH }}
+          generate_release_notes: true
+          body: |
+            ### BA Screen Record ${{ env.VERSION_NAME }}
+
+            - Version code: `${{ env.VERSION_CODE }}`
+            - Signed release APK (R8 minified + resource shrunk)
+            - Download the `.apk` below and install it on your device.
+
+            **Install note:** enable "Install unknown apps" for your browser/file manager
+            before installing.
