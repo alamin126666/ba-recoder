@@ -24,6 +24,7 @@ import base64
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.request
 
@@ -128,6 +129,20 @@ def collect_files(root: str) -> list[tuple[str, str]]:
             rel = os.path.relpath(abs_path, root).replace(os.sep, "/")
             collected.append((rel, abs_path))
     return collected
+
+
+def read_bytes(path: str, attempts: int = 5) -> bytes:
+    """ফাইল পড়ুন, ট্রান্সিয়েন্ট I/O ব্যর্থতায় (FUSE/মাউন্ট hiccup) রিট্রি সহ।"""
+    last: OSError | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            with open(path, "rb") as handle:
+                return handle.read()
+        except OSError as exc:
+            last = exc
+            if attempt < attempts:
+                time.sleep(0.4 * attempt)
+    raise OSError(f"{path} পড়া যায়নি ({attempts} চেষ্টার পর): {last}")
 
 
 def ensure_repo(gh: GitHub, owner: str, repo: str, private: bool) -> str:
@@ -248,15 +263,13 @@ def main() -> int:
                 ((r, a) for r, a in files if r == "gradlew"),
                 files[0],
             )
-            with open(seed_abs, "rb") as handle:
-                seed_bytes = handle.read()
+            seed_bytes = read_bytes(seed_abs)
             bootstrap_empty_repo(gh, full_name, args.branch, seed_rel, seed_bytes)
 
         # ১) প্রতিটি ফাইলের blob তৈরি
         tree_entries: list[dict] = []
         for index, (rel, abs_path) in enumerate(files, start=1):
-            with open(abs_path, "rb") as handle:
-                raw = handle.read()
+            raw = read_bytes(abs_path)
             blob = gh.request(
                 "POST",
                 f"/repos/{full_name}/git/blobs",
